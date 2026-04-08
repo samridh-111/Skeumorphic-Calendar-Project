@@ -5,10 +5,34 @@ import { useLocalNotes } from '../../hooks/useLocalNotes';
  * Notes panel — desktop shows a lined-paper textarea, mobile shows a stacked layout.
  * Notes are persisted to localStorage automatically.
  *
- * @param {{ variant: 'desktop' | 'mobile' }} props
+ * @param {{ variant: 'desktop' | 'mobile', events: Array }} props
  */
-export default function NotesPanel({ variant = 'desktop' }) {
-  const { notes, setNotes } = useLocalNotes();
+export default function NotesPanel({ variant = 'desktop', currentMonth, events = [] }) {
+  const { notes, setNotes } = useLocalNotes(currentMonth);
+
+  const formatDate = (dateStr) => {
+    const d = new Date(dateStr);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  };
+
+  const EventsList = () => {
+    if (!events || events.length === 0) return null;
+    return (
+      <div className="mt-4 pt-4 border-t border-gray-900/10">
+        <h4 className="font-serif italic text-lg text-gray-900 mb-2">Saved Events</h4>
+        <ul className="space-y-2">
+          {events.map((ev) => (
+            <li key={ev.id} className="flex flex-col">
+              <span className="font-serif text-gray-900 font-medium">{ev.name}</span>
+              <span className="font-sans text-xs text-gray-500 font-medium uppercase tracking-wider">
+                {formatDate(ev.startDate)} &mdash; {formatDate(ev.endDate)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
 
   if (variant === 'mobile') {
     return (
@@ -21,6 +45,7 @@ export default function NotesPanel({ variant = 'desktop' }) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
+        <EventsList />
       </footer>
     );
   }
@@ -35,8 +60,9 @@ export default function NotesPanel({ variant = 'desktop' }) {
         className="lined-paper w-full min-h-[160px] bg-transparent text-gray-900 font-serif text-lg italic leading-[2rem] resize-none focus:outline-none placeholder:text-gray-400 placeholder:font-serif placeholder:italic"
         placeholder={"Write your notes here…"}
         value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
-    </div>
+          onChange={(e) => setNotes(e.target.value)}
+        />
+        <EventsList />
+      </div>
   );
 }
