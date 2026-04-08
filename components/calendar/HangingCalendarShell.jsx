@@ -2,29 +2,56 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useCalendarMotion } from '../../hooks/useCalendarMotion';
 import { useCalendarRange } from '../../hooks/useCalendarRange';
-import CalendarActions from './CalendarActions';
-import CalendarHero from './CalendarHero';
-import CalendarGrid from './CalendarGrid';
-import NotesPanel from './NotesPanel';
+import { usePageFlip } from '../../hooks/usePageFlip';
+import { useCalendarEvents } from '../../hooks/useCalendarEvents';
+import PageFlipContainer from './PageFlipContainer';
+import EventModal from './EventModal';
 
 /**
  * HangingCalendarShell
- * Owns: hanging motion hook, hook/nail UI, swing physics, transform origin.
- * Delegates: all calendar logic to sub-components and hooks.
+ *
+ * Thin orchestrator:
+ *   • useCalendarMotion  → swing physics (rotateZ)
+ *   • usePageFlip        → month state + rotateX flip animation
+ *   • useCalendarRange   → date range selection (startDate / endDate)
+ *
+ * The swing and the flip are on separate transform axes (Z vs X),
+ * so they compose cleanly without interference.
  */
 export default function HangingCalendarShell() {
   const { controls, calendarRef, handleSwing } = useCalendarMotion();
-  const {
-    currentMonth,
-    startDate,
-    endDate,
-    selectDate,
-    goToPrevMonth,
-    goToNextMonth,
-    goToToday,
-  } = useCalendarRange();
 
-  const gridProps = { currentMonth, startDate, endDate, onSelectDate: selectDate };
+  const {
+    currentMonth, pendingMonth, isFlipping, flipDir, flipAngle,
+    flipToNext, flipToPrev, flipToToday,
+  } = usePageFlip();
+
+  const { startDate, endDate, selectDate, resetRange } = useCalendarRange(currentMonth);
+  
+  const { events, addEvent } = useCalendarEvents(currentMonth);
+  const [showModal, setShowModal] = React.useState(false);
+
+  React.useEffect(() => {
+    if (startDate && endDate) {
+      setShowModal(true);
+    } else {
+      setShowModal(false);
+    }
+  }, [startDate, endDate]);
+
+  const startDayDate = startDate ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), startDate) : null;
+  const endDayDate = endDate ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), endDate) : null;
+
+  const handleSaveEvent = (name) => {
+    addEvent(name, startDayDate, endDayDate);
+    resetRange();
+  };
+
+  const flipProps = {
+    currentMonth, pendingMonth, isFlipping, flipDir, flipAngle,
+    flipToNext, flipToPrev, flipToToday,
+    startDate, endDate, onSelectDate: selectDate,
+  };
 
   return (
     <div className="wall-texture min-h-screen flex flex-col items-center pt-6 md:pt-8 pb-6 px-4">
@@ -37,7 +64,7 @@ export default function HangingCalendarShell() {
         <div className="w-1 h-8 bg-gray-500/40 mx-auto -mt-1" />
       </div>
 
-      {/* Hanging Calendar — ANIMATED SHELL */}
+      {/* Hanging Calendar — swing wrapper */}
       <motion.div
         ref={calendarRef}
         animate={controls}
@@ -45,42 +72,24 @@ export default function HangingCalendarShell() {
         onClick={handleSwing}
         className="cursor-pointer"
       >
-
         {/* ── DESKTOP ── */}
-        <div className="hidden md:block max-w-5xl w-full bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08),0_25px_50px_rgba(0,0,0,0.05)] overflow-hidden paper-texture">
-          <CalendarActions count={12} />
-          <CalendarHero
-            variant="desktop"
-            currentMonth={currentMonth}
-            onPrev={goToPrevMonth}
-            onNext={goToNextMonth}
-            onToday={goToToday}
-          />
-          <div className="flex flex-col md:flex-row">
-            <NotesPanel variant="desktop" />
-            <CalendarGrid variant="desktop" {...gridProps} />
-          </div>
+        <div className="hidden md:flex">
+          <PageFlipContainer variant="desktop" {...flipProps} events={events} />
         </div>
 
         {/* ── MOBILE ── */}
-        <div className="md:hidden w-[92%] max-w-md bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] overflow-hidden paper-grain">
-          <div className="flex justify-around px-4 py-3 bg-gray-200 border-b border-black/5">
-            {[...Array(10)].map((_, i) => (
-              <div key={i} className="w-3 h-8 spiral-loop rounded-full shadow-sm" />
-            ))}
-          </div>
-          <CalendarHero
-            variant="mobile"
-            currentMonth={currentMonth}
-            onPrev={goToPrevMonth}
-            onNext={goToNextMonth}
-            onToday={goToToday}
-          />
-          <CalendarGrid variant="mobile" {...gridProps} />
-          <NotesPanel variant="mobile" />
+        <div className="md:hidden flex">
+          <PageFlipContainer variant="mobile" {...flipProps} events={events} />
         </div>
-
       </motion.div>
+
+      <EventModal 
+        isOpen={showModal} 
+        onClose={() => setShowModal(false)} 
+        onSave={handleSaveEvent} 
+        startDate={startDayDate} 
+        endDate={endDayDate} 
+      />
 
       {/* Shadow */}
       <div className="max-w-5xl w-full h-8 bg-black/5 blur-xl -mt-4 rounded-full" />
@@ -96,7 +105,7 @@ export default function HangingCalendarShell() {
         }
         .lined-paper {
           background-image: linear-gradient(#d1d5db 1px, transparent 1px);
-          background-size: 100% 2.5rem;
+          background-size: 100% 2rem;
         }
         .paper-grain {
           background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuAsWbd147SDdJPAVFEK9Rh3NceuMxOE0hh5bIX7fE2AMcc1a73B7NXSUtkgPkvVsZ9i3U3ljcdFmKv-MmceEe92RcarQDFx6sgD-MLRRaDicRkGPwk0GMEGxszc6fH1k0pNTFemSYttwbEEm7l2IflQxFJczVfD6EUwlVQlGtmtp5keQ_IGo-O2NsJeZxaXl3L067uy8RHbWOUEpotzwGvM9CGgNgwweoQsdTDyYswe5NECqjJTipZvB7Hudrg6GkrJDMHxl7xSQrw);
